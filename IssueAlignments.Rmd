@@ -1,0 +1,221 @@
+---
+title: "Symbolic Sponsorship CCES"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+
+```{r, echo = FALSE, include=FALSE}
+library(tidyverse)
+library(haven)
+library(lme4)
+library(sjPlot)
+library(ggthemes)
+library(rstanarm)
+library(marginaleffects)
+library(stargazer)
+#library(lmerTest)
+
+set.seed(1234)
+
+load(file = "CES_SymbolicLegislation.rda")
+ces$inc_approve_cent<- ces$inc_approve - mean(ces$inc_approve)
+
+ces$college<- NA
+ces$college[ces$educ >= 5]<- "college"
+ces$college[ces$educ <= 4]<- "no college"
+
+ces$LogBillSpons<- log(ces$BillsSpons + 1)
+
+#ces<- ces %>%
+#  sample_n(16000)
+
+```
+
+
+
+Basic Model: 
+
+Varying slopes and intercepts by each congressional district year. 
+
+
+Level 1 (Individual level):
+$$Y_{ij} = \beta_{0j} + \beta_{1j}PartisanAlignment_{ij} + \epsilon_{ij}$$
+Level 2 (District-Year level):
+$$\beta_{0j} = \gamma_{00} + \gamma_{01} Bills_{j} + u_{0j}$$
+$$\beta_{1j} = \gamma_{10} + \gamma_{11}BillsSpons_{j} + u_{1j}$$
+
+
+```{r, include = FALSE}
+
+mod1 <- lmer(inc_approve ~ 1 + BillsSpons * party_match + (1 + party_match | dist_year),
+                    data = ces, 
+                    REML = FALSE,
+                    control = lmerControl(optimizer = "bobyqa",
+                                        optCtrl = list(maxfun = 1000)))
+#summary(mod1)
+
+```
+
+
+
+
+Graphs of Bill Sponsorship interacted with Partisanship
+
+```{r, echo = FALSE}
+##Predicted values
+
+graph1<- plot_model(mod1, type = "pred", terms = c("BillsSpons", "party_match")) +
+  theme_tufte() + 
+  ggtitle("Predicted Voter Approval of MC") + 
+  xlab("Bills Sponsored") + 
+  ylab("Approval") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Party Match") 
+print(graph1)
+
+
+# Plot interaction effects
+graph2<- marginaleffects::plot_slopes(mod1, variables = "BillsSpons", condition = "party_match",
+                                      re.form = NA) + 
+  theme_tufte() + 
+  ggtitle("Marginal Effects of Bills Sponsored on Approval") + 
+  xlab("") + 
+  ylab("Marginal Effects of Bills Sponsored") + 
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5)
+print(graph2)
+
+```
+
+
+
+
+```{r, include = FALSE}
+
+modIss <- lmer(inc_approve ~ 1 + BillsSpons * IssueAgree  + (1 + IssueAgree | dist_year),
+                    data = ces, 
+                    REML = FALSE,
+                    control = lmerControl(optimizer = "bobyqa",
+                                        optCtrl = list(maxfun = 1000)))
+summary(modIss)
+
+
+graphAgree<- marginaleffects::plot_slopes(modIss, variables = "BillsSpons", condition = "IssueAgree",
+                                      re.form = NA) + 
+  theme_tufte() + 
+  ggtitle("Marginal Effects of Bills Sponsored on Approval Over Issue Agreement") + 
+  xlab("") + 
+  ylab("Marginal Effects of Bills Sponsored") + 
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5)
+print(graphAgree)
+
+
+```
+
+```{r}
+graphAgreePred<- plot_model(modIss, type = "int", terms = c("BillsSpons", "IssueAgree"),
+                            group.terms = c(-1, 0, 1)) +
+  theme_tufte() + 
+  ggtitle("Predicted Voter Approval of MC") + 
+  xlab("Bills Sponsored") + 
+  ylab("Approval") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Issue Agreement") 
+print(graphAgreePred)
+
+```
+
+
+
+
+
+
+
+
+```{r}
+modAgreeParty <- lmer(inc_approve ~ 1 + BillsSpons * IssueAgree + BillsSpons * party_match + (1 + party_match | dist_year),
+                    data = ces, 
+                    REML = FALSE,
+                    control = lmerControl(optimizer = "bobyqa",
+                                        optCtrl = list(maxfun = 1000)))
+summary(modAgreeParty)
+
+```
+
+
+```{r}
+modAgreePartyRob <- lmer(inc_approve ~ 1 + LogBillSpons * IssueAgree + LogBillSpons * party_match + (1 + party_match | dist_year),
+                    data = ces, 
+                    REML = FALSE,
+                    control = lmerControl(optimizer = "bobyqa",
+                                        optCtrl = list(maxfun = 1000)))
+summary(modAgreePartyRob)
+
+```
+
+```{r}
+cesSame<- ces %>%
+  filter(party_match == "Same Party")
+
+modSameAgree <- lmer(inc_approve ~ 1 + BillsSpons * IssueAgree +  
+                       (1 + IssueAgree | dist_year),
+                    data = cesSame, 
+                    REML = FALSE,
+                    control = lmerControl(optimizer = "bobyqa",
+                                        optCtrl = list(maxfun = 1000)))
+summary(modSameAgree)
+
+
+```
+
+```{r}
+graphSameAgree<- marginaleffects::plot_slopes(modSameAgree, variables = "BillsSpon", condition = "IssueAgree",
+                                      re.form = NA) + 
+  theme_tufte() + 
+  ggtitle("Marginal Effects of Bills Sponsored on Approval Over Issue Agreement for Same Party") + 
+  xlab("") + 
+  ylab("Marginal Effects of Bills Sponsored") + 
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5)
+print(graphSameAgree)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Subscript Notation Explanation
+
+Variable Definitions: 
+
+$Y_{i(j)}$: Incumbent approval rating for individual i in district-year j
+$(BillsSpons)_{j}$: Number of bills sponsored by the incumbent in district-year j (Level 2)
+$(party_match)_{i(j)}$: Party match for individual i in district-year j (Level 1)
+$\epsilon_{i(j)}$: Random error for individual i in district-year j
+$u_{0j}$: Random intercept for district-year j
+$u_{1j}$: Random slope for district-year j
+
+Model Parameters:
+
+$\gamma_{00}$: Overall intercept
+$\gamma_{01}$: Effect of bills sponsored (Level 2)
+$\gamma_{10}$: Effect of partisan alignment (Level 1)
+$\gamma_{11}$: Cross-level interaction effect
+
+
+Combined Model:
+$$Y_{i(j)} = \gamma_{00} + \gamma_{01}(\text{BillsSpons}){j} + \gamma{10}(\text{party_match}){i(j)} + \gamma{11}(\text{BillsSpons}){j}(\text{party_match}){i(j)} + u_{0j} + u_{1j}(\text{party_match}){i(j)} + \epsilon{i(j)}$$
+
